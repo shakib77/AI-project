@@ -81,3 +81,33 @@ for col in ('MiscVal', 'PoolArea', 'LotArea', 'LowQualFinSF', '3SsnPorch',
        'GarageYrBlt'):
     train[col]=boxcox1p(train[col],lam)
     test[col]=boxcox1p(test[col],lam)
+	train['SalePrice']=np.log(train['SalePrice'])
+
+houses=pd.concat([train,test], sort=False)
+houses=pd.get_dummies(houses)
+
+train=houses[:len_train]
+test=houses[len_train:]
+
+train.drop('Id', axis=1, inplace=True)
+test.drop('Id', axis=1, inplace=True)
+
+x=train.drop('SalePrice', axis=1)
+y=train['SalePrice']
+test=test.drop('SalePrice', axis=1)
+
+sc=RobustScaler()
+x=sc.fit_transform(x)
+test=sc.transform(test)
+
+model=Lasso(alpha =0.001, random_state=1)
+
+model.fit(x,y)
+
+pred=model.predict(test)
+preds=np.exp(pred)
+
+output=pd.DataFrame({'Id':test2.Id, 'SalePrice':preds})
+output.to_csv('submission.csv', index=False)
+
+output.head()
