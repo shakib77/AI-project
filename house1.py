@@ -24,7 +24,7 @@ print(train.head())
 
 #to do some plotting
 plt.style.use(style='ggplot')
-plt.rcParams['figure.figsize'] = (10, 6)
+plt.rcParams['figure.figsize'] = (10, 5)
 
 
 
@@ -33,7 +33,8 @@ plt.rcParams['figure.figsize'] = (10, 6)
 
 print("3 \n")
 
-# to get more information like count, mean, std, min, max etc
+# to get more information like count, mean, std, min, max etc 
+# (.describe()-Generate descriptive statistics that summarize the central tendency)
 print (train.SalePrice.describe())
 
 print("4 \n")
