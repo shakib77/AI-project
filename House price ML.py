@@ -424,4 +424,140 @@ for train_index, test_index in kf.split(X):
     test_errors_ENet.append(np.square(pred_test_ENet - y_test).mean() ** 0.5)
     test_errors_LGB.append(np.square(pred_test_LGB - y_test).mean() ** 0.5)
     test_errors_stack.append(np.square(pred_test_stack - y_test).mean() ** 0.5)  
+        
+print(np.mean(test_errors_l2))
+print(np.mean(test_errors_l1))
+print(np.mean(test_errors_GBR))
+print(np.mean(test_errors_ENet))
+print(np.mean(test_errors_LGB))
+print(np.mean(test_errors_stack))
+
+scoredata = pd.read_csv('../input/house-prices-advanced-regression-techniques/test.csv')
+
+scoredata['MSSubClass'] = scoredata['MSSubClass'].apply(str)
+scoredata['YrSold'] = scoredata['YrSold'].astype(str)
+scoredata['MoSold'] = scoredata['MoSold'].astype(str)
+
+
+scoredata = fill_missings(scoredata)
+
+scoredata['ExterQual'] = scoredata['ExterQual'].apply(QualToInt)
+scoredata['ExterCond'] = scoredata['ExterCond'].apply(QualToInt)
+scoredata['KitchenQual'] = scoredata['KitchenQual'].apply(QualToInt)
+scoredata['HeatingQC'] = scoredata['HeatingQC'].apply(QualToInt)
+scoredata['BsmtQual'] = scoredata['BsmtQual'].apply(QualToInt)
+scoredata['BsmtCond'] = scoredata['BsmtCond'].apply(QualToInt)
+scoredata['FireplaceQu'] = scoredata['FireplaceQu'].apply(QualToInt)
+scoredata['GarageQual'] = scoredata['GarageQual'].apply(QualToInt)
+scoredata['PoolQC'] = scoredata['PoolQC'].apply(QualToInt)
+scoredata['LandSlope'] = scoredata['LandSlope'].apply(SlopeToInt)
+scoredata['CentralAir'] = scoredata['CentralAir'].apply( lambda x: 0 if x == 'N' else 1) 
+scoredata['Street'] = scoredata['Street'].apply( lambda x: 0 if x == 'Grvl' else 1) 
+scoredata['GarageFinish'] = scoredata['GarageFinish'].apply(GFinishToInt)
+scoredata['BsmtExposure'] = scoredata['BsmtExposure'].apply(BsmtExposureToInt)
+
+scoredata['TotalSF'] = scoredata['TotalBsmtSF'] + scoredata['1stFlrSF'] + scoredata['2ndFlrSF']
+scoredata['TotalSF'] = scoredata['TotalSF'].fillna(0)
+
+scoredata['Functional_int'] = scoredata['Functional'].apply(FunctionalToInt)
+scoredata['HouseStyle_int'] = scoredata['HouseStyle'].apply(HouseStyleToInt)
+scoredata['HouseStyle_1st'] = 1*(scoredata['HouseStyle'] == '1Story')
+scoredata['HouseStyle_2st'] = 1*(scoredata['HouseStyle'] == '2Story')
+scoredata['HouseStyle_15st'] = 1*(scoredata['HouseStyle'] == '1.5Fin')
+scoredata['Foundation_int'] = scoredata['Foundation'].apply(FoundationToInt)
+scoredata['MasVnrType_int'] = scoredata['MasVnrType'].apply(MasVnrTypeToInt)
+scoredata['BsmtFinType1_int'] = scoredata['BsmtFinType1'].apply(BsmtFinType1ToInt)
+scoredata['BsmtFinType1_Unf'] = 1*(scoredata['BsmtFinType1'] == 'Unf')
+scoredata['PavedDrive'] = scoredata['PavedDrive'].apply( lambda x: 0 if x == 'Y' else 1)
+
+scoredata['HasWoodDeck'] = (scoredata['WoodDeckSF'] == 0) * 1
+scoredata['HasOpenPorch'] = (scoredata['OpenPorchSF'] == 0) * 1
+scoredata['HasEnclosedPorch'] = (scoredata['EnclosedPorch'] == 0) * 1
+scoredata['Has3SsnPorch'] = (scoredata['3SsnPorch'] == 0) * 1
+scoredata['HasScreenPorch'] = (scoredata['ScreenPorch'] == 0) * 1
+scoredata['Total_Home_Quality'] = scoredata['OverallQual'] + scoredata['OverallCond']
+
+scoredata['MSSubClass'] = scoredata['MSSubClass'].apply(lambda x: '20' if x == '150' else x)
+scoredata['MSZoning'] = scoredata['MSZoning'].apply(lambda x: 'RL' if x == 'missing' else x)
+scoredata['Utilities'] = scoredata['Utilities'].apply(lambda x: 'AllPub' if x == 'missing' else x)
+scoredata['Exterior1st'] = scoredata['Exterior1st'].apply(lambda x: 'VinylSd' if x == 'missing' else x)
+scoredata['Exterior2nd'] = scoredata['Exterior2nd'].apply(lambda x: 'VinylSd' if x == 'missing' else x)
+scoredata['Functional'] = scoredata['Functional'].apply(lambda x: 'Typ' if x == 'missing' else x)
+scoredata['SaleType'] = scoredata['SaleType'].apply(lambda x: 'WD' if x == 'missing' else x)
+scoredata['SaleCondition'] = scoredata['SaleCondition'].apply(lambda x: 'Normal' if x == 'missing' else x)
+
+scoredata = addlogs(scoredata, loglist)
+def getdummies_transform(res, ls, decoder):
+    def encode(encode_df, le_df, enc_df):
+        encode_df = np.array(encode_df)
+        res1 = le_df.transform(encode_df).reshape(-1, 1)
+        return pd.DataFrame(enc_df.transform(res1).toarray())
     
+    L = len(ls)
+    outres = pd.DataFrame({'A' : []})
+
+    for j in range(L):
+        l = ls[j]
+        le = decoder[j][0]
+        enc = decoder[j][1]
+        cat = encode(res[l], le, enc)
+        cat.columns = [l+str(x) for x in cat.columns]
+        outres.reset_index(drop=True, inplace=True)
+        outres = pd.concat([outres, cat], axis = 1)
+    
+    return outres
+
+df_scores = getdummies_transform(scoredata, catpredlist, decoder)
+df_scores = pd.concat([df_scores,scoredata[floatpredlist]],axis=1)
+df_scores = addSquared(df_scores, sqpredlist)
+
+X_score = np.array(df_scores)
+X_score = np.delete(X_score, 0, axis=1)
+
+M = X_score.shape[0]
+scores_fin = 1+np.zeros(M)
+
+for md in models:
+    l2 = md[0]
+    l1 = md[1]
+    GBR = md[2]
+    ENet = md[3]
+    LGB = md[4]
+    l1_stacked = md[5]
+    
+    l2_scores = l2.predict(X_score)
+    l1_scores = l1.predict(X_score)
+    GBR_scores = GBR.predict(X_score)
+    ENet_scores = ENet.predict(X_score)
+    LGB_scores = LGB.predict(X_score)
+    
+    stackedsets = pd.DataFrame({'A' : []})
+    stackedsets = pd.concat([stackedsets,pd.DataFrame(l2_scores)],axis=1)
+    stackedsets = pd.concat([stackedsets,pd.DataFrame(l1_scores)],axis=1)
+    stackedsets = pd.concat([stackedsets,pd.DataFrame(GBR_scores)],axis=1)
+    stackedsets = pd.concat([stackedsets,pd.DataFrame(ENet_scores)],axis=1)
+    stackedsets = pd.concat([stackedsets,pd.DataFrame(LGB_scores)],axis=1)
+    prod = (l2_scores*l1_scores*GBR_scores*ENet_scores*LGB_scores) ** (1.0/5.0)
+    stackedsets = pd.concat([stackedsets,pd.DataFrame(prod)],axis=1)    
+    Xstacks = np.array(stackedsets)
+    Xstacks = np.delete(Xstacks, 0, axis=1)
+    scores_fin = scores_fin * l1_stacked.predict(Xstacks)
+scores_fin = scores_fin ** (1/nF)
+  
+svm_solution = pd.read_csv('../input/svm-solution-32/svm_solution_32.csv')
+svm_solution_ln = np.log(svm_solution['SalePrice'])
+
+# Averaging stacked and SVM predictions
+fin_score = np.sqrt(scores_fin * svm_solution_ln)
+
+Id = scoredata['Id']
+fin_score = pd.DataFrame({'SalePrice': np.exp(fin_score)-1})
+fin_data = pd.concat([Id,fin_score],axis=1)
+
+q1 = fin_data['SalePrice'].quantile(0.0042)
+q2 = fin_data['SalePrice'].quantile(0.99)
+
+fin_data['SalePrice'] = fin_data['SalePrice'].apply(lambda x: x if x > q1 else x*0.77)
+fin_data['SalePrice'] = fin_data['SalePrice'].apply(lambda x: x if x < q2 else x*1.1)
+
+fin_data.to_csv('House_Prices_submit.csv', sep=',', index = False)
